@@ -23,6 +23,7 @@ lugsail <- function(x, lugsail_parameters, the_kernel= bartlett){
 
 # Lugsail Support Function to get lugsail parmeters
 # (default) b = Andrews (1991) Rule: 0.75*big_T^(-2*q/(2*q+1))
+# q for Bartlett, Parzen, and QS are 1,2,2, respectively.
 get_lugsail_parameters <- function(big_T, q, method = "Zero",
                                    b = 0.75*big_T^(-2*q/(2*q+1))){
 
