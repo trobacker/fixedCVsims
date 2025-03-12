@@ -1,4 +1,9 @@
-# Lugsail Transformation (main)
+#' Lugsail Transformation (main)
+#' 
+#' @param x numeric, autocovariance values
+#' @param lugsail_parameters list(numeric r, numeric c), lugsail parameters which
+#' can also be obtained from [get_lugsail_parameters].
+#' @param the_kernel function, the mother kernel to be used
 lugsail <- function(x, lugsail_parameters, the_kernel= bartlett){
   r <- lugsail_parameters$r
   c <- lugsail_parameters$c
@@ -21,9 +26,15 @@ lugsail <- function(x, lugsail_parameters, the_kernel= bartlett){
   return(y)
 }
 
-# Lugsail Support Function to get lugsail parmeters
-# (default) b = Andrews (1991) Rule: 0.75*big_T^(-2*q/(2*q+1))
-# q for Bartlett, Parzen, and QS are 1,2,2, respectively.
+#' Lugsail Support Function to get lugsail parameters
+#' (default) b = Andrews (1991) Rule: 0.75*big_T^(-2*q/(2*q+1))
+#' q for Bartlett, Parzen, and QS are 1,2,2, respectively.
+#' 
+#' @param big_T numeric, length of time series
+#' @param q numeric, characteristic component (Parzen 1957). q for Bartlett, 
+#' Parzen, and QS are 1,2,2, respectively.
+#' @param method character, one of "Over", "Adaptive", or default "Zero" (not unique)
+#' @param b numeric, bandwidth parameter, default is b = 0.75*big_T^(-2*q/(2*q+1))
 get_lugsail_parameters <- function(big_T, q, method = "Zero",
                                    b = 0.75*big_T^(-2*q/(2*q+1))){
 
