@@ -8,8 +8,10 @@ library(Matrix)
 library(MASS)
 library(distr)
 
-source("R/kernels.R")
-source("R/lugsail.R")
+setwd("./R")
+source("kernels.R")
+source("lugsail.R")
+source("get_cv.R")
 #source("R/get_cv.R") #
 #source("get_b.R") # Has an error right now, Set b = 0.1 for now!
 #source("estimate_LRV.R")
@@ -229,6 +231,8 @@ weighted_autocov <- sapply(X = all_autocovariances, FUN = the_kernel)
 # When r = 1, c = 0, lugsail == mother kernel
 lugsail_parameters <- list(r = 1, c = 0)
 lugsail_parameters <- list(r = 0.5, c = 0.5)
+lugsail_parameters <- get_lugsail_parameters(big_T = big_T, q = 1, method = "Zero")
+
 weighted_autocov <- sapply(X = all_autocovariances, FUN = lugsail, lugsail_parameters = lugsail_parameters, 
                            the_kernel = the_kernel)
 
@@ -249,6 +253,7 @@ plot(data_sine$Y ~ c(1:big_T), type = "l",
      xlab = "Time", ylab = "Response Y")
 
 
+
 # set.seed(123)
 # big_T <- 100
 # data_homo <- AR1_AR_u(big_T = big_T, phi = 0.7, d = 1)
@@ -258,4 +263,130 @@ plot(data_sine$Y ~ c(1:big_T), type = "l",
 # plot(data_sine$Y ~ c(1:big_T), type = "l")
 #
 
+#### Type 1 Error Example ####
+set.seed(123)
+nsim <- 1000    # Number of simulations for Type errors
+alpha <- 0.05   # Significance level
+big_T <- 100    # Time Series length
+phi = 0.9       # Autocorrelation parameter
+d = 4           # X dimension (univariate Y for now)
 
+type1_vec <- rep(NA, nsim)   # Store type1 freq
+#type2_vec <- rep(NA, nsim)  # Store type2 freq
+
+
+for(i in 1:nsim){
+  # Simulate data
+  data_homo <- AR1_AR_u(big_T = big_T, phi = phi, d = d)
+  Y <- data_homo$Y
+  X <- data_homo$X
+  big_T <- nrow(X) # Sample Size
+  
+  # LRV Estimate
+  # Bandwidth decision rule
+  b = 0.1     # There exist better rules
+  
+  # Have to weight the autocovariances by kernel
+  all_autocovariances <- sapply(0:(big_T-1),
+                              autocovariance_multivariate,
+                              Y = as.matrix(Y))
+  
+  # Select Kernel(s)
+  the_kernel <- bartlett    # Define kernel function
+  the_kernel_string <- 'bartlett' # String for printing
+  
+  # Apply kernel to autocovariances (matrix may be more involved) 
+  weighted_autocov <- sapply(X = all_autocovariances, FUN = the_kernel)
+  
+  # Lugsail Kernel test
+  # When r = 1, c = 0, lugsail == mother kernel
+  lugsail_parameters <- list(r = 1, c = 0)
+  #lugsail_parameters <- list(r = 0.5, c = 0.5)
+  #lugsail_parameters <- get_lugsail_parameters(big_T = big_T, q = 1, method = "Zero")
+  
+  weighted_autocov <- sapply(X = all_autocovariances, FUN = lugsail, lugsail_parameters = lugsail_parameters, 
+                           the_kernel = the_kernel)
+  
+  # Construct omega-hat (LRV)
+  omega_hat <- sum(weighted_autocov)
+  
+  # Parameter estimates for testing
+  #!!! Dumb question(s) that I want to walk through
+  # phi vs. ols param estimates
+  params <- ols(y = Y, X = X)
+  
+  # TEST STATISTIC
+  # See `second_regressor.R` line 405+: F_stat
+  #t_stat <- sqrt(big_T)*(var_model$ar[1] - phi) / (sqrt(omega_hat))
+  t_stat <- sqrt(big_T)*(var_model$ar[1] - phi) / (sqrt(omega_hat))
+  
+  # CRITICAL VALUE
+  critval <- get_cv(new_b = b, d = d, alpha = alpha, 
+                    the_kernel =  "Bartlett",
+                    lugsail = "Mother",
+                    method = "fitted")
+  
+  # Compare critical value and test statistic 
+  type1_error <- ifelse(tstat < critval, 0, 1) # 1 if reject H0
+  type1_vec[i] <- type1_error # Store 0's, 1's
+  
+  
+  # Printing/debug
+  # cat("Kernel:", the_kernel_string)
+  # cat("omega hat:", omega_hat)
+  # cat("sqrt(omega-hat)", sqrt(omega_hat))
+
+}
+
+# Type 1 error
+mean(type1_vec)
+
+
+
+
+# ## Easy version ## 
+# #### Testing Type 1 Error ####
+# 
+# # Set parameters
+# set.seed(123)
+# n <- 30        # Sample size
+# mu0 <- 0       # Null hypothesis mean
+# mu1 <- 1       # Alternative hypothesis mean
+# sigma <- 1     # Standard deviation
+# 
+# nsim <- 10000  # number of simulations
+# type1_vec <- rep(NA, nsim) # Store type1 freq
+# type2_vec <- rep(NA, nsim) # Store type2 freq
+# 
+# for(i in 1:nsim){
+#   # Simulate data
+#   data_null <- rnorm(n, mean = mu0, sd = sigma)
+#   data_alt <- rnorm(n, mean = mu1, sd = sigma)
+# 
+#   # Perform t-test
+#   t_test_null <- t.test(data_null, mu = mu0)
+#   t_test_alt <- t.test(data_alt, mu = mu0)
+# 
+#   # Type I error
+#   type1_error <- ifelse(t_test_null$p.value < alpha, 1, 0)
+#   type1_vec[i] <- type1_error
+# 
+#   # Type II error
+#   type2_error <- ifelse(t_test_alt$p.value >= alpha, 1, 0)
+#   type2_vec[i] <- type2_error
+# 
+# }
+# # Type 1 error
+# type1 <- mean(type1_vec)
+# 
+# # Type 2 error
+# type2 <- mean(type2_vec)
+# 
+# # Power
+# power <- 1 - mean(type2_vec)
+# 
+# # Results
+# cat("Type I Error:", type1, "\n")
+# cat("Type II Error:", type2, "\n")
+# cat("Power:", power, "\n")
+# 
