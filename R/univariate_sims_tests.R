@@ -22,7 +22,7 @@ source("get_cv.R")
 ## Good old OLS
 ols <- function(y, X) {
   # Add a column of ones to the predictor matrix for the intercept term
-  X <- cbind(1, X)
+  #X <- cbind(1, X) # Add intercept
 
   # Calculate the OLS estimates using the formula (X'X)^(-1)X'y
   beta <- solve(t(X) %*% X) %*% t(X) %*% y
@@ -65,7 +65,15 @@ autocovariance_multivariate <- function(Y, h) {
     gamma_h <- gamma_h + (Y[i, ] - Y_mean) %*% t(Y[i+h, ] - Y_mean)
   }
 
-  gamma_h <- gamma_h / big_T
+  #not for lag 0
+  if(h==0){
+    gamma_h <- gamma_h / big_T
+  }
+  else{
+    # add transpose for h > 1
+    gamma_h <- 2 * gamma_h / big_T  
+  }
+  
 
   return(gamma_h)
 }
@@ -81,6 +89,7 @@ autocovariance_multivariate <- function(Y, h) {
 #' @param d numeric, Dimension and number of columns of X of the time series to create
 #' @return Return a matrix X that has dimension big_T by d
 AR_X <- function(big_T, phi, d){
+  # Make a random normal draw
   X <- matrix(0, nrow = big_T, ncol = d)
 
   for(i in 2:big_T){
@@ -195,92 +204,123 @@ b = 0.1
 all_autocovariances <- sapply(0:(big_T-1),
                                   autocovariance_multivariate,
                                   Y = as.matrix(data_sine$Y))
+# Plot autocovs
+plot(all_autocovariances~ c(1:100), 
+     main = "Plot of Autocovariance vs Time",
+     xlab = "Time", 
+     ylab = "Auto Cov", 
+     col = "orange", 
+     pch = 16)
 
 
-# Implementing bandwidth rules/functions to apply with 'all_autocovairances'
+# Implementing bandwidth rules/functions to apply with 'all_autocovariances'
 
-
-# W <- sapply(try_b, function(b){
-#   if(b == 0 ){
-#     new_weights <- c(1, rep(0, c(big_T-1)))
-#   } else{
-#     M <- b*big_T
-#     new_weights <- sapply(0:(big_T -1)/(M), the_kernel)
-#   }
-# })
-# W <- t(W)
-# rownames(W) = paste("b=", round(try_b, 3), sep = "")
-# colnames(W) = paste("Lag=", 0:(nrow(all_autocovariances)-1), sep = "")
-
-
-### ###
-
-# [#, ] the try_b value
-# [ , #]  a component of the estimated LRV
-#    Omega_11, Omega_12,  ..., Omega_1d; ...; Omega_d1, ...Omega_dd
-#omega_hats <- W %*% all_autocovariances
-#rownames(omega_hats) <- paste("b=", round(try_b, 3)) # for testing many b's
+LRV_mother_estimator <- function(b, all_autocovariances, the_kernel){
+  big_T <- nrow(as.matrix(all_autocovariances))
+  
+  # Make the weights that correspond to the autocovariances
+  # Each row corresponds to the weights for a specific weight.
+  # Each column corresponds to the autocovariance lag
+  # Each simulation gets each row of these scenarios.
+  W <- sapply(b, function(b){
+    if(b == 0){
+      new_weights <- c(1, rep(0, c(big_T-1)))
+    } else{
+      M <- b*big_T
+      new_weights <- sapply(0:(big_T -1)/(M), the_kernel)
+    }
+  })
+  W <- t(W)
+  rownames(W) = paste("b=", round(b, 3), sep = "")
+  colnames(W) = paste("Lag=", 0:(nrow(as.matrix(all_autocovariances))-1), sep = "")
+  
+  
+  # [#, ] the b value
+  # [ , #]  a component of the estimated LRV
+  #    Omega_11, Omega_12,  ..., Omega_1d; ...; Omega_d1, ...Omega_dd
+  omega_hats <- W %*% all_autocovariances
+  rownames(omega_hats) <- paste("b=", round(b, 3))
+  
+  return(omega_hats)
+}
 
 # Apply kernel to autocovariances
 # kernels: bartlett, qs, parzen, th
-the_kernel <- bartlett
-the_kernel_string <- 'bartlett'
-weighted_autocov <- sapply(X = all_autocovariances, FUN = the_kernel)
+# the_kernel <- bartlett
+# the_kernel_string <- 'bartlett'
+## Do LRV_estimator to use bandwidth
+#weighted_autocov <- sapply(X = all_autocovariances, FUN = the_kernel)
+
+# Plot weighted autocov
+# lines(weighted_autocov~ c(1:100), 
+#      col = "dodgerblue", 
+#      pch = 16)
+
+# plot(weighted_autocov~ c(1:100), 
+#      main = "Plot of Weighted Autocovariance vs Time",
+#      xlab = "Time", 
+#      ylab = "Auto Cov", 
+#      col = "dodgerblue", 
+#      pch = 16)
 
 # Lugsail Kernel test
 # When r = 1, c = 0, lugsail == mother kernel
-lugsail_parameters <- list(r = 1, c = 0)
-lugsail_parameters <- list(r = 0.5, c = 0.5)
-lugsail_parameters <- get_lugsail_parameters(big_T = big_T, q = 1, method = "Zero")
 
-weighted_autocov <- sapply(X = all_autocovariances, FUN = lugsail, lugsail_parameters = lugsail_parameters, 
-                           the_kernel = the_kernel)
+# lugsail_parameters <- list(r = 1, c = 0)
+# lugsail_parameters <- list(r = 0.5, c = 0.5)
+# lugsail_parameters <- get_lugsail_parameters(big_T = big_T, q = 1, method = "Zero")
+# 
+# weighted_autocov <- sapply(X = all_autocovariances, FUN = lugsail, lugsail_parameters = lugsail_parameters, 
+#                            the_kernel = the_kernel)
+# 
+# # Plot autocov and weighted autocov
+# plot(all_autocovariances ~ c(1:100), 
+#      main = "Plot of Autocovariance vs Time \n (Zero Lugsail)",
+#      xlab = "Time", 
+#      ylab = "Auto Cov", 
+#      col = "orange", 
+#      pch = 16)
+# lines(weighted_autocov ~ c(1:100),
+#       col = "dodgerblue")
+
 
 # Construct omega-hat (LRV)
-omega_hat <- sum(weighted_autocov)
-cat("Kernel:", the_kernel_string)
-cat("omega hat:", omega_hat)
-cat("sqrt(omega-hat)", sqrt(omega_hat))
+# omega_hat <- sum(weighted_autocov)
+# cat("Kernel:", the_kernel_string)
+# cat("omega hat:", omega_hat)
+# cat("sqrt(omega-hat)", sqrt(omega_hat))
 
 # Covariance of model parameters
 # sigma_covariance = solve(M) %*% kernel(h, b, big_T) * autocovariance(lag h) %*% solve(M)
-sigma_covariance <- solve(M) * sum(weighted_autocov) * solve(M)
-print(sigma_covariance)
+# sigma_covariance <- solve(M) * sum(weighted_autocov) * solve(M)
+# print(sigma_covariance)
 
-# Plot data
-plot(data_sine$Y ~ c(1:big_T), type = "l",
-     main = paste0("AR1_SINE Simulated Data, phi=", phi),
-     xlab = "Time", ylab = "Response Y")
-
-
-
-# set.seed(123)
-# big_T <- 100
-# data_homo <- AR1_AR_u(big_T = big_T, phi = 0.7, d = 1)
-# plot(data_homo$Y ~ c(1:big_T), type = "l")
-#
-# data_sine <- AR1_SINE(big_T = big_T, phi = 0.7, d = 5)
-# plot(data_sine$Y ~ c(1:big_T), type = "l")
-#
 
 #### Type 1 Error Example ####
-set.seed(123)
+set.seed(1234)
 nsim <- 1000    # Number of simulations for Type errors
 alpha <- 0.05   # Significance level
-big_T <- 100    # Time Series length
-phi = 0.9       # Autocorrelation parameter
-d = 4           # X dimension (univariate Y for now)
+big_T <- 1000    # Time Series length
+phi = 0 # 0.9       # Autocorrelation parameter
+d = 1           # X dimension (univariate Y for now)
+
+# True parameter values for testing
+null_means = rep(0, d)     #  add d+1 for intercept?
 
 type1_vec <- rep(NA, nsim)   # Store type1 freq
-#type2_vec <- rep(NA, nsim)  # Store type2 freq
+test_stats_vec <- rep(NA, nsim) # store stats
 
 
 for(i in 1:nsim){
   # Simulate data
-  data_homo <- AR1_AR_u(big_T = big_T, phi = phi, d = d)
+  data_homo <- AR1_AR_u(big_T = big_T, phi = phi, d = d, theta = rep(0,d))
   Y <- data_homo$Y
   X <- data_homo$X
   big_T <- nrow(X) # Sample Size
+  
+  # The means (+ intercept? Not now)
+  # consider autocor parameter vs. ols param estimates, if centered then always phi?
+  theta_hat = ols(y = Y, X = X)
   
   # LRV Estimate
   # Bandwidth decision rule
@@ -289,14 +329,14 @@ for(i in 1:nsim){
   # Have to weight the autocovariances by kernel
   all_autocovariances <- sapply(0:(big_T-1),
                               autocovariance_multivariate,
-                              Y = as.matrix(Y))
+                              Y = as.matrix(X * Y)) # ERRORS! # X * (Y - X %*% theta_hat))
   
   # Select Kernel(s)
   the_kernel <- bartlett    # Define kernel function
   the_kernel_string <- 'bartlett' # String for printing
   
   # Apply kernel to autocovariances (matrix may be more involved) 
-  weighted_autocov <- sapply(X = all_autocovariances, FUN = the_kernel)
+  #weighted_autocov <- sapply(X = all_autocovariances, FUN = the_kernel)
   
   # Lugsail Kernel test
   # When r = 1, c = 0, lugsail == mother kernel
@@ -304,30 +344,67 @@ for(i in 1:nsim){
   #lugsail_parameters <- list(r = 0.5, c = 0.5)
   #lugsail_parameters <- get_lugsail_parameters(big_T = big_T, q = 1, method = "Zero")
   
-  weighted_autocov <- sapply(X = all_autocovariances, FUN = lugsail, lugsail_parameters = lugsail_parameters, 
-                           the_kernel = the_kernel)
+  # weighted_autocov <- sapply(X = all_autocovariances, FUN = lugsail,
+  #                            lugsail_parameters = lugsail_parameters, 
+  #                            the_kernel = the_kernel)
+  
+  # Apply bandwidth and kernel rules to get LRV (Mother kernels)
+  omega_hat_LRV <- LRV_mother_estimator(b = 0.1, all_autocovariances = all_autocovariances, the_kernel = the_kernel)
+  
   
   # Construct omega-hat (LRV)
-  omega_hat <- sum(weighted_autocov)
+  #omega_hat <- sum(weighted_autocov)
   
-  # Parameter estimates for testing
-  #!!! Dumb question(s) that I want to walk through
-  # phi vs. ols param estimates
-  params <- ols(y = Y, X = X)
+  # Data term for covariance matrix of model
+  M <- solve(t(X) %*% X / big_T )  # Data Term, d by d
   
-  # TEST STATISTIC
+  # Covariance matrix for model
+  #sigma_covariance <- solve(M) * sum(weighted_autocov) * solve(M)
+  sigma_covariance <- M * omega_hat_LRV[1] * M
+  
+  # TEST STATISTICs
+  # !!!
   # See `second_regressor.R` line 405+: F_stat
-  #t_stat <- sqrt(big_T)*(var_model$ar[1] - phi) / (sqrt(omega_hat))
-  t_stat <- sqrt(big_T)*(var_model$ar[1] - phi) / (sqrt(omega_hat))
+  # Generally, an F_stat
+  # Testing THETA's, not rho/phi autocorr.
+  # NO: t_stat <- sqrt(big_T)*(var_model$ar[1] - phi) / (sqrt(omega_hat))
+  
+  # Here, d = 4, p = 1 (t-stat?)
+  
+  diff <- (theta_hat - null_means) # add +1 for intercept? 
+  
+  # d = 1
+  t_stat <- diff/sqrt(sigma_covariance/big_T) # DIVIDE BY SIGMA_COVARIANCE
+  test_stats_vec[i] <- t_stat
+  # record omegahats, 
+  
+  
+  
+  # VAR - multiple Ys
+  # Issue here, dim(omega_hat_LRV) = square p by p, 
+  # so t(diff) %*% omega^-1 %*% diff doesn't work but that can't be right.
+  
+  # F Stat
+  #F_stat = big_T * solve(omega_hat_LRV) * t(diff)  %*% diff / d
+  
+  
+  # Square for chi-square.. Use F-stat
+  test_statistic <- t_stat ** 2 # Chi-square for p = 1?
+  #test_statistic <- F_stat
   
   # CRITICAL VALUE
   critval <- get_cv(new_b = b, d = d, alpha = alpha, 
                     the_kernel =  "Bartlett",
                     lugsail = "Mother",
-                    method = "fitted")
+                    method = "analytical")
+  
+  if(i %% 100 == 0){cat("(n = ", i, ") Test Statistic: ", test_statistic, 
+                        "   Crit Value: ", critval, "\n")}
+  
   
   # Compare critical value and test statistic 
-  type1_error <- ifelse(tstat < critval, 0, 1) # 1 if reject H0
+  # But for t, there's one for each component of X. 
+  type1_error <- ifelse(test_statistic < critval, 0, 1) # 1 if reject H0
   type1_vec[i] <- type1_error # Store 0's, 1's
   
   
@@ -342,6 +419,17 @@ for(i in 1:nsim){
 mean(type1_vec)
 
 
+
+
+# Plot data
+plot(data_homo$Y ~ c(1:big_T), type = "l",
+     main = paste0("AR1_HOMO Simulated Data, phi=", phi),
+     xlab = "Time", ylab = "Response Y")
+
+# # Plot data
+# plot(data_sine$Y ~ c(1:big_T), type = "l",
+#      main = paste0("AR1_HOMO Simulated Data, phi=", phi),
+#      xlab = "Time", ylab = "Response Y")
 
 
 # ## Easy version ## 

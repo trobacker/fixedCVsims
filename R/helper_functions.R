@@ -1,27 +1,46 @@
-# Script containing several helper functions for simulation purposes
+## Functions for simulation use
+here::i_am("R/helper_functions.R")
+#proj_path <- here::here()
+#setwd("./R")
 library(Matrix)
 library(MASS)
 library(distr)
 
+#setwd("./R")
+source("kernels.R")
+source("lugsail.R")
+source("get_cv.R")
+#source("R/get_cv.R") #
+#source("get_b.R") # Has an error right now, Set b = 0.1 for now!
+#source("estimate_LRV.R")
 
-#' Function to calculate the OLS estimates of a multivariate time series
-#'
-#' @param Y matrix of the Y-values of the time-series
-#' @param X input variables
-#' @return List containing (beta, errors) of the OLS estimate, beta-hat, and residuals, 
-#' errors, for y = X'beta + error
-ols <- function(Y, X) {
+
+#### Helper Functions ####
+
+## Good old OLS
+ols <- function(y, X) {
+  # Add a column of ones to the predictor matrix for the intercept term
+  #X <- cbind(1, X) # Add intercept
+  
+  # Calculate the OLS estimates using the formula (X'X)^(-1)X'y
+  beta <- solve(t(X) %*% X) %*% t(X) %*% y
+  
+  # Return the estimated coefficients
+  return(beta)
+}
+
+## Get OLS Errors/Residuals
+ols_errors <- function(y, X) {
   # Add a column of ones to the predictor matrix for the intercept term
   X <- cbind(1, X)
   
   # Calculate the OLS estimates using the formula (X'X)^(-1)X'y
-  beta <- solve(t(X) %*% X) %*% t(X) %*% Y
+  beta <- solve(t(X) %*% X) %*% t(X) %*% y
   
   # Calculate the errors/residuals
-  errors <- Y - X %*% beta
+  errors <- y - X %*% beta
   
-  # Return the estimated coefficients
-  return(list(beta = beta, errors = errors))
+  return(errors)
 }
 
 # AUTOCOVARIANCE #
@@ -44,7 +63,15 @@ autocovariance_multivariate <- function(Y, h) {
     gamma_h <- gamma_h + (Y[i, ] - Y_mean) %*% t(Y[i+h, ] - Y_mean)
   }
   
-  gamma_h <- gamma_h / big_T
+  #not for lag 0
+  if(h==0){
+    gamma_h <- gamma_h / big_T
+  }
+  else{
+    # add transpose for h > 1
+    gamma_h <- 2 * gamma_h / big_T  
+  }
+  
   
   return(gamma_h)
 }
@@ -60,6 +87,7 @@ autocovariance_multivariate <- function(Y, h) {
 #' @param d numeric, Dimension and number of columns of X of the time series to create
 #' @return Return a matrix X that has dimension big_T by d
 AR_X <- function(big_T, phi, d){
+  # Make a random normal draw
   X <- matrix(0, nrow = big_T, ncol = d)
   
   for(i in 2:big_T){
@@ -127,4 +155,35 @@ AR1_SINE <- function(big_T, phi, d, theta = rep(0, d)){
   u <- sine_u(big_T, phi)
   Y <- X%*%theta + u
   return(list(Y = c(Y), X = X))
+}
+
+# Implementing bandwidth rules/functions to apply with 'all_autocovariances'
+
+LRV_mother_estimator <- function(b, all_autocovariances, the_kernel){
+  big_T <- nrow(as.matrix(all_autocovariances))
+  
+  # Make the weights that correspond to the autocovariances
+  # Each row corresponds to the weights for a specific weight.
+  # Each column corresponds to the autocovariance lag
+  # Each simulation gets each row of these scenarios.
+  W <- sapply(b, function(b){
+    if(b == 0){
+      new_weights <- c(1, rep(0, c(big_T-1)))
+    } else{
+      M <- b*big_T
+      new_weights <- sapply(0:(big_T -1)/(M), the_kernel)
+    }
+  })
+  W <- t(W)
+  rownames(W) = paste("b=", round(b, 3), sep = "")
+  colnames(W) = paste("Lag=", 0:(nrow(as.matrix(all_autocovariances))-1), sep = "")
+  
+  
+  # [#, ] the b value
+  # [ , #]  a component of the estimated LRV
+  #    Omega_11, Omega_12,  ..., Omega_1d; ...; Omega_d1, ...Omega_dd
+  omega_hats <- W %*% all_autocovariances
+  rownames(omega_hats) <- paste("b=", round(b, 3))
+  
+  return(omega_hats)
 }
