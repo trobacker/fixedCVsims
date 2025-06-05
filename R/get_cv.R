@@ -1,3 +1,4 @@
+setwd("~/Documents/GitHub/fixedCV")
 
 # Analytical CV -----------------------------------------------------------
 
@@ -65,8 +66,10 @@ get_cv_simulated <- function(new_b, d, alpha, the_kernel, lugsail){
 
   # Read in the simulated fitted values based on the method
   alpha <- paste(0, alpha*100, sep = "")
+  if(alpha == "010") alpha <- "10"
+  if(alpha == "02.5") alpha <- "025"
   file <- paste(the_kernel, lugsail, alpha, "Master.csv", sep = "_")
-  file <- paste("../data/", file, sep = "")
+  file <- paste("data/", file, sep = "")
   the_table <- read.csv(file)
 
   # Pick correct CV for each b
@@ -86,7 +89,7 @@ get_cv_simulated <- function(new_b, d, alpha, the_kernel, lugsail){
 
 get_cv_fitted <- function(new_b, d, alpha, the_kernel, lugsail){
   # Read in all fitted values for the fitted CV method
-  the_fits <- read.csv("../data/fitted_CV.csv")
+  the_fits <- read.csv("data/fitted_CV.csv")
   chisq_cv <-  qchisq(1-alpha, df = d)/d
 
   # Pull out only the values you need
@@ -110,7 +113,7 @@ get_cv_fitted <- function(new_b, d, alpha, the_kernel, lugsail){
 
 
 get_cv <- function(new_b, d = 1, alpha = 0.05, the_kernel = "Bartlett",
-                   lugsail = "Mother",method = "simulated"){
+                   lugsail = "Mother", method = "simulated"){
   if(method == "simulated"){
     cv_by_b <- get_cv_simulated(new_b, d, alpha, the_kernel, lugsail)
   }
